@@ -367,18 +367,44 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'hero' | 'rune'>('hero');
   const [selectedHero, setSelectedHero] = useState<any | null>(null);
   
-  const [enemyFormation] = useState<keyof typeof formations>('yanyue');
+  const [enemyFormation, setEnemyFormation] = useState<keyof typeof formations>('yanyue');
   const [enemyBoard, setEnemyBoard] = useState<(ItemData | null)[]>(Array(16).fill(null));
 
-  useEffect(() => {
+  const randomizeEnemyLineup = () => {
+    // 1. Randomly select a formation
+    const formationKeys = Object.keys(formations) as (keyof typeof formations)[];
+    const randomFormationKey = formationKeys[Math.floor(Math.random() * formationKeys.length)];
+    setEnemyFormation(randomFormationKey);
+
+    // 2. Randomly fill 4 heroes into the formation
     const newEnemyBoard = Array(16).fill(null);
-    newEnemyBoard[12] = { type: 'hero', item: heroes[1] };
-    newEnemyBoard[13] = { type: 'hero', item: heroes[4] };
-    newEnemyBoard[14] = { type: 'hero', item: heroes[9] };
-    newEnemyBoard[15] = { type: 'hero', item: heroes[12] };
-    newEnemyBoard[8] = { type: 'rune', item: runes[10] };
-    newEnemyBoard[9] = { type: 'rune', item: runes[19] };
+    const formationSlots = formations[randomFormationKey].slots;
+    
+    const shuffledHeroes = [...heroes].sort(() => 0.5 - Math.random());
+    const selectedHeroes = shuffledHeroes.slice(0, 4);
+    
+    formationSlots.forEach((slotIndex, i) => {
+      newEnemyBoard[slotIndex] = { type: 'hero', item: selectedHeroes[i] };
+    });
+
+    // 3. Randomly unlock a batch of rune slots (2 to 6 slots)
+    const numRunesToUnlock = Math.floor(Math.random() * 5) + 2;
+    const availableRuneSlots = Array.from({ length: 16 }).map((_, i) => i).filter(i => !formationSlots.includes(i));
+    
+    const shuffledRuneSlots = [...availableRuneSlots].sort(() => 0.5 - Math.random());
+    const unlockedRuneSlots = shuffledRuneSlots.slice(0, numRunesToUnlock);
+
+    // 4. Fill the unlocked slots with corresponding runes
+    unlockedRuneSlots.forEach(slotIndex => {
+      const randomRune = runes[Math.floor(Math.random() * runes.length)];
+      newEnemyBoard[slotIndex] = { type: 'rune', item: randomRune };
+    });
+
     setEnemyBoard(newEnemyBoard);
+  };
+
+  useEffect(() => {
+    randomizeEnemyLineup();
   }, []);
   
   const [formationStates, setFormationStates] = useState<Record<string, { level: number, unlockedSlots: number[] }>>({
@@ -778,7 +804,16 @@ export default function App() {
 
             {/* Right Board (Enemy) */}
             <div className="flex flex-col items-center">
-              <h2 className="text-xl font-bold text-red-400 mb-4">敌方阵容</h2>
+              <div className="flex items-center justify-between w-[400px] mb-4">
+                <h2 className="text-xl font-bold text-red-400">敌方阵容</h2>
+                <button 
+                  onClick={randomizeEnemyLineup}
+                  disabled={isBattling}
+                  className="px-3 py-1 bg-red-900/50 text-red-300 border border-red-700 rounded hover:bg-red-800 hover:text-white transition-colors text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🎲 随机阵容
+                </button>
+              </div>
               <div className="grid grid-cols-4 grid-rows-4 gap-2 bg-[#111] p-4 rounded-xl border-2 border-red-900 shadow-[0_0_30px_rgba(153,27,27,0.3)] w-[400px] h-[400px]">
                 {Array.from({ length: 16 }).map((_, i) => {
                   const col = 4 - Math.floor(i / 4);
