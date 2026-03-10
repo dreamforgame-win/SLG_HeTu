@@ -287,7 +287,7 @@ const BattleSlot = ({
       className={`relative rounded-lg flex flex-col items-center justify-center transition-all duration-300 text-xs w-full h-full ${
         isHeroSlot
           ? isEnemy ? 'border-2 border-dashed border-red-900/50 bg-red-900/10' : 'border-2 border-dashed border-[#f6b93b] bg-[#f6b93b]/10'
-          : 'border-2 border-dashed border-[#82ccdd]/50 bg-[#82ccdd]/10'
+          : 'border-2 border-dashed border-transparent bg-[#82ccdd]/5'
       } ${
         (isHeroSlot && hasBuffs) ? (isEnemy ? 'shadow-[0_0_15px_#ef4444] border-[#ef4444] border-solid' : 'shadow-[0_0_15px_#66fcf1] border-[#66fcf1] border-solid') : ''
       } ${isDead ? 'opacity-30 grayscale' : ''} ${isTargeted ? 'ring-4 ring-red-500 ring-opacity-50' : ''}`}
@@ -506,7 +506,7 @@ export default function App() {
     setCurrentAction(undefined);
     setActionMessage(null);
     
-    const engine = new BattleEngine(board, enemyBoard, formation, enemyFormation);
+    const engine = new BattleEngine(board, enemyBoard, formation, enemyFormation, buffs, enemyBuffs);
     const logs = engine.main_loop(100);
     
     let i = 0;

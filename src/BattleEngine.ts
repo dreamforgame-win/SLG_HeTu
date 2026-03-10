@@ -19,6 +19,17 @@ export class Hero {
   buffs: { type: string, duration: number, value?: any }[] = [];
   shield: number = 0;
   
+  critRate: number = 0.1;
+  dodgeRate: number = 0.05;
+  critDmg: number = 1.5;
+  lifesteal: number = 0;
+  dmgReduction: number = 0;
+  range: number = 1;
+  charge: boolean = false;
+  armorPen: number = 0;
+  shieldBreak: boolean = false;
+  healBonus: number = 0;
+  
   constructor(data: any, position: number, team: 'player' | 'enemy') {
     this.id = data.id + '_' + team + '_' + position;
     this.name = data.name;
@@ -98,23 +109,51 @@ export class BattleEngine {
     'fangyuan': { 1: 0.1, 7: 0.2, 8: 0.3, 14: 0.4 }
   };
 
-  constructor(playerBoard: any[], enemyBoard: any[], playerFormation: string, enemyFormation: string) {
+  constructor(playerBoard: any[], enemyBoard: any[], playerFormation: string, enemyFormation: string, playerBuffs: string[][], enemyBuffs: string[][]) {
     this.playerFormation = playerFormation;
     this.enemyFormation = enemyFormation;
     
     playerBoard.forEach((slot, i) => {
       if (slot && slot.type === 'hero') {
-        this.heroes.push(new Hero(slot.item, i, 'player'));
+        const hero = new Hero(slot.item, i, 'player');
+        this.applyRunes(hero, playerBuffs[i]);
+        this.heroes.push(hero);
       }
     });
     
     enemyBoard.forEach((slot, i) => {
       if (slot && slot.type === 'hero') {
-        this.heroes.push(new Hero(slot.item, i, 'enemy'));
+        const hero = new Hero(slot.item, i, 'enemy');
+        this.applyRunes(hero, enemyBuffs[i]);
+        this.heroes.push(hero);
       }
     });
     
     this.log('战斗开始！');
+  }
+
+  applyRunes(hero: Hero, buffs: string[]) {
+    buffs.forEach(buff => {
+      if (buff === '+20能') hero.energy += 20;
+      if (buff === '+50%攻') hero.atk *= 1.5;
+      if (buff === '+30%暴' || buff === '+暴击') hero.critRate = (hero.critRate || 0) + 0.3;
+      if (buff === '+30%闪') hero.dodgeRate = (hero.dodgeRate || 0) + 0.3;
+      if (buff === '+50%爆伤') hero.critDmg = (hero.critDmg || 1.5) + 0.5;
+      if (buff === '+20%吸血') hero.lifesteal = (hero.lifesteal || 0) + 0.2;
+      if (buff === '+速度') hero.spd *= 1.2;
+      if (buff === '+免伤') hero.dmgReduction = (hero.dmgReduction || 0) + 0.2;
+      if (buff === '+防御') hero.def *= 1.3;
+      if (buff === '+射程') hero.range = (hero.range || 1) + 1;
+      if (buff === '+冲锋') hero.charge = true;
+      if (buff === '+破甲') hero.armorPen = (hero.armorPen || 0) + 0.3;
+      if (buff === '+破盾') hero.shieldBreak = true;
+      if (buff === '+攻击') hero.atk *= 1.2;
+      if (buff === '+治疗') hero.healBonus = (hero.healBonus || 0) + 0.3;
+      if (buff === '+法强') hero.int *= 1.3;
+    });
+    hero.current_hp = hero.hp; // Update current_hp in case max hp changed (though none of the buffs change max hp currently)
+    hero.base_av = 10000 / hero.spd;
+    hero.current_av = hero.charge ? 0 : hero.base_av;
   }
   
   getSnapshot(): BattleState {
@@ -175,7 +214,8 @@ export class BattleEngine {
     
     let totalProb = 0;
     const enemyProbs = enemies.map(e => {
-      const p = probs[e.position] || 1;
+      // If attacker has increased range, they ignore formation probabilities and have equal chance to hit anyone
+      const p = attacker.range > 1 ? 1 : (probs[e.position] || 1);
       totalProb += p;
       return { hero: e, prob: p };
     });
@@ -192,21 +232,38 @@ export class BattleEngine {
   dealDamage(attacker: Hero, target: Hero, skillMultiplier: number, isMagic: boolean, isTrueDamage = false, ignoreDefPercent = 0) {
     if (target.current_hp <= 0) return;
 
+    // Dodge check
+    if (!isTrueDamage && Math.random() < target.dodgeRate) {
+      this.log(`${target.name} 闪避了 ${attacker.name} 的攻击！`);
+      return;
+    }
+
     let damage = 0;
     if (isTrueDamage) {
       damage = (isMagic ? attacker.int : attacker.atk) * skillMultiplier;
     } else {
-      const targetDef = target.def * (1 - ignoreDefPercent);
+      const totalArmorPen = ignoreDefPercent + attacker.armorPen;
+      const targetDef = target.def * Math.max(0, 1 - totalArmorPen);
       if (isMagic) {
-        damage = (attacker.int * skillMultiplier) * (300 / (300 + target.int));
+        damage = (attacker.int * skillMultiplier) * (300 / (300 + target.int * Math.max(0, 1 - totalArmorPen)));
       } else {
         damage = (attacker.atk * skillMultiplier) * (300 / (300 + targetDef));
       }
     }
 
+    // Crit check
+    let isCrit = false;
+    if (!isTrueDamage && Math.random() < attacker.critRate) {
+      isCrit = true;
+      damage *= attacker.critDmg;
+    }
+
     if (target.hasBuff('weakness')) damage *= 1.3;
     if (target.hasBuff('protection')) damage *= 0.5;
     if (attacker.hasBuff('resonance')) damage += attacker.spd * 2;
+    
+    // Damage reduction
+    damage *= Math.max(0, 1 - target.dmgReduction);
 
     damage = Math.max(1, Math.floor(damage));
     
@@ -215,18 +272,22 @@ export class BattleEngine {
       const linkedAllies = this.getAliveHeroes(target.team).filter(h => h.hasBuff('soul_link'));
       const splitDamage = Math.floor(damage / linkedAllies.length);
       linkedAllies.forEach(ally => {
-        this.applyDamage(attacker, ally, splitDamage, isMagic);
+        this.applyDamage(attacker, ally, splitDamage, isMagic, isCrit);
       });
     } else {
-      this.applyDamage(attacker, target, damage, isMagic);
+      this.applyDamage(attacker, target, damage, isMagic, isCrit);
     }
   }
 
-  applyDamage(attacker: Hero, target: Hero, damage: number, isMagic: boolean) {
+  applyDamage(attacker: Hero, target: Hero, damage: number, isMagic: boolean, isCrit: boolean = false) {
+    if (attacker.shieldBreak) {
+      target.shield = 0;
+    }
+
     if (target.shield > 0) {
       if (target.shield >= damage) {
         target.shield -= damage;
-        this.log(`${attacker.name} 对 ${target.name} 造成了 ${damage} 点${isMagic ? '谋略' : '物理'}伤害 (护盾吸收)`);
+        this.log(`${attacker.name} 对 ${target.name} 造成了 ${damage} 点${isMagic ? '谋略' : '物理'}伤害${isCrit ? '(暴击)' : ''} (护盾吸收)`);
         return;
       } else {
         damage -= target.shield;
@@ -235,12 +296,18 @@ export class BattleEngine {
     }
 
     target.current_hp -= damage;
-    this.log(`${attacker.name} 对 ${target.name} 造成了 ${damage} 点${isMagic ? '谋略' : '物理'}伤害 (剩余兵力: ${Math.max(0, target.current_hp)})`, {
+    this.log(`${attacker.name} 对 ${target.name} 造成了 ${damage} 点${isMagic ? '谋略' : '物理'}伤害${isCrit ? '(暴击)' : ''} (剩余兵力: ${Math.max(0, target.current_hp)})`, {
       type: 'damage',
       sourceId: attacker.id,
       targetId: target.id,
       value: damage
     });
+
+    if (attacker.lifesteal > 0) {
+      const healAmount = Math.floor(damage * attacker.lifesteal * (1 + attacker.healBonus));
+      attacker.current_hp = Math.min(attacker.hp, attacker.current_hp + healAmount);
+      this.log(`${attacker.name} 吸血恢复了 ${healAmount} 点兵力`);
+    }
     
     if (target.current_hp <= 0 && target.hasBuff('death_resist')) {
       target.current_hp = 1;
@@ -272,7 +339,7 @@ export class BattleEngine {
 
   heal(caster: Hero, target: Hero, amount: number) {
     if (target.current_hp <= 0) return;
-    amount = Math.floor(amount);
+    amount = Math.floor(amount * (1 + caster.healBonus));
     target.current_hp = Math.min(target.hp, target.current_hp + amount);
     this.log(`${caster.name} 治疗了 ${target.name} ${amount} 点兵力 (剩余兵力: ${target.current_hp})`, {
       type: 'heal',

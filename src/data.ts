@@ -32,7 +32,7 @@ export const runes = [
   { id: 'r10', name: '右下符', desc: '右下武将 +20% 吸血', icon: '↘️', effect: { type: 'directional', dx: 1, dy: 1, buff: '+20%吸血' } },
   { id: 'r5', name: '连珠符(右)', desc: '右侧两格武将加速', icon: '⏩', effect: { type: 'directional', dx: [1, 2], dy: [0, 0], buff: '+速度' } },
   { id: 'r6', name: '十字铁壁', desc: '四周武将 +免伤', icon: '💠', effect: { type: 'directional', dx: [0, 0, -1, 1], dy: [-1, 1, 0, 0], buff: '+免伤' } },
-  { id: 'r11', name: '坚盾符', desc: '最近盾兵 +防御', icon: '🛡️', effect: { type: 'unit', targetUnit: '盾兵', targetCount: 1, buff: '+防御' } },
+  { id: 'r11', name: '坚盾符', desc: '最近步兵 +防御', icon: '🛡️', effect: { type: 'unit', targetUnit: '步兵', targetCount: 1, buff: '+防御' } },
   { id: 'r12', name: '双弓符', desc: '最近2个弓兵 +射程', icon: '🏹', effect: { type: 'unit', targetUnit: '弓兵', targetCount: 2, buff: '+射程' } },
   { id: 'r13', name: '铁骑符', desc: '全部骑兵 +冲锋', icon: '🐎', effect: { type: 'unit', targetUnit: '骑兵', targetCount: 'all', buff: '+冲锋' } },
   { id: 'r14', name: '长枪符', desc: '全部枪兵 +破甲', icon: '🔱', effect: { type: 'unit', targetUnit: '枪兵', targetCount: 'all', buff: '+破甲' } },
